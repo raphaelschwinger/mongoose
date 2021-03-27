@@ -316,7 +316,8 @@ block content
     console.log(axl.name.first + ' ' + axl.name.last); // Axl Rose
     ```
 
-    But concatenating the first and last name every time can get cumbersome.
+    But [concatenating](https://masteringjs.io/tutorials/fundamentals/string-concat) the first and
+    last name every time can get cumbersome.
     And what if you want to do some extra processing on the name, like
     [removing diacritics](https://www.npmjs.com/package/diacritics)? A
     [virtual property getter](./api.html#virtualtype_VirtualType-get) lets you
@@ -364,6 +365,8 @@ block content
     Only non-virtual properties work as part of queries and for field selection.
     Since virtuals are not stored in MongoDB, you can't query with them.
 
+    You can [learn more about virtuals here](https://masteringjs.io/tutorials/mongoose/virtuals).
+
     <h3 id="aliases"><a href="#aliases">Aliases</a></h3>
 
     Aliases are a particular type of virtual where the getter and setter
@@ -375,7 +378,7 @@ block content
     const personSchema = new Schema({
       n: {
         type: String,
-        // Now accessing `name` will get you the value of `n`, and setting `n` will set the value of `name`
+        // Now accessing `name` will get you the value of `n`, and setting `name` will set the value of `n`
         alias: 'name'
       }
     });
@@ -418,8 +421,10 @@ block content
     - [autoIndex](#autoIndex)
     - [autoCreate](#autoCreate)
     - [bufferCommands](#bufferCommands)
+    - [bufferTimeoutMS](#bufferTimeoutMS)
     - [capped](#capped)
     - [collection](#collection)
+    - [discriminatorKey](#discriminatorKey)
     - [id](#id)
     - [_id](#_id)
     - [minimize](#minimize)
@@ -431,6 +436,7 @@ block content
     - [toJSON](#toJSON)
     - [toObject](#toObject)
     - [typeKey](#typeKey)
+    - [typePojoToMixed](/docs/schematypes.html#mixed)
     - [useNestedStrict](#useNestedStrict)
     - [validateBeforeSave](#validateBeforeSave)
     - [versionKey](#versionKey)
@@ -503,6 +509,16 @@ block content
     const schema = new Schema({..}, { bufferCommands: false });
     ```
 
+    <h3 id="bufferTimeoutMS"><a href="#bufferTimeoutMS">option: bufferTimeoutMS</a></h3>
+
+    If `bufferCommands` is on, this option sets the maximum amount of time Mongoose buffering will wait before
+    throwing an error. If not specified, Mongoose will use 10000 (10 seconds).
+
+    ```javascript
+    // If an operation is buffered for more than 1 second, throw an error.
+    const schema = new Schema({..}, { bufferTimeoutMS: 1000 });
+    ```
+
     <h3 id="capped"><a href="#capped">option: capped</a></h3>
 
     Mongoose supports MongoDBs [capped](http://www.mongodb.org/display/DOCS/Capped+Collections)
@@ -532,6 +548,25 @@ block content
 
     ```javascript
     const dataSchema = new Schema({..}, { collection: 'data' });
+    ```
+
+    <h3 id="discriminatorKey"><a href="#discriminatorKey">option: discriminatorKey</a></h3>
+
+    When you define a [discriminator](/docs/discriminators.html), Mongoose adds a path to your
+    schema that stores which discriminator a document is an instance of. By default, Mongoose
+    adds an `__t` path, but you can set `discriminatorKey` to overwrite this default.
+
+    ```javascript
+    const baseSchema = new Schema({}, { discriminatorKey: 'type' });
+    const BaseModel = mongoose.model('Test', baseSchema);
+
+    const personSchema = new Schema({ name: String });
+    const PersonModel = BaseModel.discriminator('Person', personSchema);
+
+    const doc = new PersonModel({ name: 'James T. Kirk' });
+    // Without `discriminatorKey`, Mongoose would store the discriminator
+    // key in `__t` instead of `type`
+    doc.type; // 'Person'
     ```
 
     <h3 id="id"><a href="#id">option: id</a></h3>
@@ -784,7 +819,7 @@ block content
     <h3 id="toJSON"><a href="#toJSON">option: toJSON</a></h3>
 
     Exactly the same as the [toObject](#toObject) option but only applies when
-    the document's `toJSON` method is called.
+    the document's [`toJSON` method](https://thecodebarbarian.com/what-is-the-tojson-function-in-javascript.html) is called.
 
     ```javascript
     const schema = new Schema({ name: String });

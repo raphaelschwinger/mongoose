@@ -74,6 +74,7 @@ block content
       <li><a href="#dynamic-ref">Dynamic References via `refPath`</a></li>
       <li><a href="#populate-virtuals">Populate Virtuals</a></li>
       <li><a href="#count">Populate Virtuals: The Count Option</a></li>
+      <li><a href="#populating-maps">Populating Maps</a></li>
       <li><a href="#populate-middleware">Populate in Middleware</a></li>
     </ul>
 
@@ -219,7 +220,7 @@ block content
         // prints "The author is Ian Fleming"
 
         console.log('The authors age is %s', story.author.age);
-        // prints "The authors age is null'
+        // prints "The authors age is null"
       });
     ```
 
@@ -296,8 +297,8 @@ block content
     <h3 id="limit-vs-perDocumentLimit"><a href="#limit-vs-perDocumentLimit">limit vs. perDocumentLimit</a></h3>
 
     Populate does support a `limit` option, however, it currently
-    does **not** limit on a per-document basis. For example, suppose
-    you have 2 stories:
+    does **not** limit on a per-document basis for backwards compatibility. For example,
+    suppose you have 2 stories:
 
     ```javascript
     Story.create([
@@ -310,12 +311,16 @@ block content
     would find that the 2nd story has 0 fans:
 
     ```javascript
-    const stories = Story.find().sort({ name: 1 }).populate({
+    const stories = Story.find().populate({
       path: 'fans',
       options: { limit: 2 }
     });
 
+    stories[0].name; // 'Casino Royale'
     stories[0].fans.length; // 2
+
+    // 2nd story has 0 fans!
+    stories[1].name; // 'Live and Let Die'
     stories[1].fans.length; // 0
     ```
 
@@ -324,17 +329,20 @@ block content
     `numDocuments * limit` as the limit. If you need the correct
     `limit`, you should use the `perDocumentLimit` option (new in Mongoose 5.9.0).
     Just keep in mind that `populate()` will execute a separate query
-    for each story.
+    for each story, which may cause `populate()` to be slower.
 
     ```javascript
-    const stories = await Story.find().sort({ name: 1 }).populate({
+    const stories = await Story.find().populate({
       path: 'fans',
       // Special option that tells Mongoose to execute a separate query
       // for each `story` to make sure we get 2 fans for each story.
       perDocumentLimit: 2
     });
 
+    stories[0].name; // 'Casino Royale'
     stories[0].fans.length; // 2
+
+    stories[1].name; // 'Live and Let Die'
     stories[1].fans.length; // 2
     ```
 
@@ -662,16 +670,16 @@ block content
     });
     ```
 
-    Keep in mind that virtuals are _not_ included in `toJSON()` output by default. If you want populate virtuals to show up when using functions
-    that rely on `JSON.stringify()`, like Express'
-    [`res.json()` function](http://expressjs.com/en/4x/api.html#res.json),
+    Keep in mind that virtuals are _not_ included in `toJSON()` and `toObject()` output by default. If you want populate
+    virtuals to show up when using functions that rely on `JSON.stringify()`, like Express'
+    [`res.json()` function](https://masteringjs.io/tutorials/express/json),
     set the `virtuals: true` option on your schema's `toJSON` options.
 
     ```javascript
-    // Set `virtuals: true` so `res.json()` works
-    const BandSchema = new Schema({
-      name: String
-    }, { toJSON: { virtuals: true } });
+    const BandSchema = new Schema({ name: String }, {
+      toJSON: { virtuals: true }, // So `res.json()` and other `JSON.stringify()` functions include virtuals
+      toObject: { virtuals: true } // So `toObject()` output includes virtuals
+    });
     ```
 
     If you're using populate projections, make sure `foreignField` is included
@@ -719,6 +727,76 @@ block content
     const doc = await Band.findOne({ name: 'Motley Crue' }).
       populate('numMembers');
     doc.numMembers; // 2
+    ```
+
+    <h3 id="populating-maps"><a href="#populating-maps">Populating Maps</a></h3>
+
+    [Maps](/docs/schematypes.html#maps) are a type that represents an object with arbitrary
+    string keys. For example, in the below schema, `members` is a map from strings to ObjectIds.
+
+    ```javascript
+    const BandSchema = new Schema({
+      name: String,
+      members: {
+        type: Map,
+        of: {
+          type: 'ObjectId',
+          ref: 'Person'
+        }
+      }
+    });
+    const Band = mongoose.model('Band', bandSchema);
+    ```
+
+    This map has a `ref`, which means you can use `populate()` to populate all the ObjectIds
+    in the map. Suppose you have the below `band` document:
+
+    ```
+    const person1 = new Person({ name: 'Vince Neil' });
+    const person2 = new Person({ name: 'Mick Mars' });
+
+    const band = new Band({
+      name: 'Motley Crue',
+      members: {
+        'singer': person1._id,
+        'guitarist': person2._id
+      }
+    });
+    ```
+
+    You can `populate()` every element in the map by populating the special path `members.$*`.
+    `$*` is a special syntax that tells Mongoose to look at every key in the map.
+
+    ```javascript
+    const band = await Band.findOne({ name: 'Motley Crue' }).populate('members.$*');
+
+    band.members.get('singer'); // { _id: ..., name: 'Vince Neil' }
+    ```
+
+    You can also populate paths in maps of subdocuments using `$*`. For example, suppose you
+    have the below `librarySchema`:
+
+    ```javascript
+    const librarySchema = new Schema({
+      name: String,
+      books: {
+        type: Map,
+        of: new Schema({
+          title: String,
+          author: {
+            type: 'ObjectId',
+            ref: 'Person'
+          }
+        })
+      }
+    });
+    const Library = mongoose.model('Library, librarySchema');
+    ```
+
+    You can `populate()` every book's author by populating `books.$*.author`:
+
+    ```javascript
+    const libraries = await Library.find().populate('books.$*.author');
     ```
 
     <h3 id="populate-middleware"><a href="#populate-middleware">Populate in Middleware</a></h3>

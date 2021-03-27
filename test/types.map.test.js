@@ -956,4 +956,76 @@ describe('Map', function() {
       assert.equal(board.elements.size, 0);
     });
   });
+
+  it('supports `null` in map of subdocuments (gh-9628)', function() {
+    const testSchema = new Schema({
+      messages: { type: Map, of: new Schema({ _id: false, text: String }) }
+    });
+
+    const Test = db.model('Test', testSchema);
+
+    return co(function*() {
+      let doc = yield Test.create({
+        messages: { prop1: { text: 'test' }, prop2: null }
+      });
+
+      doc = yield Test.findById(doc);
+
+      assert.deepEqual(doc.messages.get('prop1').toObject(), { text: 'test' });
+      assert.strictEqual(doc.messages.get('prop2'), null);
+      assert.ifError(doc.validateSync());
+    });
+  });
+
+  it('tracks changes correctly (gh-9811)', function() {
+    const SubSchema = Schema({
+      myValue: {
+        type: String
+      }
+    }, { _id: false });
+    const schema = Schema({
+      myMap: {
+        type: Map,
+        of: {
+          type: SubSchema
+        }
+        // required: true
+      }
+    }, { minimize: false, collection: 'test' });
+    const Model = db.model('Test', schema);
+    return co(function*() {
+      const doc = yield Model.create({
+        myMap: new Map()
+      });
+      doc.myMap.set('abc', { myValue: 'some value' });
+      const changes = doc.getChanges();
+      assert.ok(!changes.$unset);
+      assert.deepEqual(changes, { $set: { 'myMap.abc': { myValue: 'some value' } } });
+    });
+  });
+
+  it('handles map of arrays (gh-9813)', function() {
+    const BudgetSchema = new mongoose.Schema({
+      budgeted: {
+        type: Map,
+        of: [Number]
+      }
+    });
+
+    const Budget = db.model('Test', BudgetSchema);
+
+    return co(function*() {
+      const _id = yield Budget.create({
+        budgeted: new Map([['2020', [100, 200, 300]]])
+      }).then(doc => doc._id);
+
+      const doc = yield Budget.findById(_id);
+      doc.budgeted.get('2020').set(2, 10);
+      assert.deepEqual(doc.getChanges(), { $set: { 'budgeted.2020.2': 10 } });
+      yield doc.save();
+
+      const res = yield Budget.findOne();
+      assert.deepEqual(res.toObject().budgeted.get('2020'), [100, 200, 10]);
+    });
+  });
 });

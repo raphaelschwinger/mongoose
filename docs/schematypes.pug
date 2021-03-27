@@ -288,19 +288,25 @@ block content
     * `trim`: boolean, whether to always call `.trim()` on the value
     * `match`: RegExp, creates a [validator](./validation.html) that checks if the value matches the given regular expression
     * `enum`: Array, creates a [validator](./validation.html) that checks if the value is in the given array.
-    * `minlength`: Number, creates a [validator](./validation.html) that checks if the value length is not less than the given number
-    * `maxlength`: Number, creates a [validator](./validation.html) that checks if the value length is not greater than the given number
+    * `minLength`: Number, creates a [validator](./validation.html) that checks if the value length is not less than the given number
+    * `maxLength`: Number, creates a [validator](./validation.html) that checks if the value length is not greater than the given number
+    * `populate`: Object, sets default [populate options](/docs/populate.html#query-conditions)
 
     <h5 id="number-validators">Number</h5>
 
     * `min`: Number, creates a [validator](./validation.html) that checks if the value is greater than or equal to the given minimum.
     * `max`: Number, creates a [validator](./validation.html) that checks if the value is less than or equal to the given maximum.
     * `enum`: Array, creates a [validator](./validation.html) that checks if the value is strictly equal to one of the values in the given array.
+    * `populate`: Object, sets default [populate options](/docs/populate.html#query-conditions)
 
     <h5>Date</h5>
 
     * `min`: Date
     * `max`: Date
+
+    <h5>ObjectId</h5>
+
+    * `populate`: Object, sets default [populate options](/docs/populate.html#query-conditions)
 
     <h3 id="usage-notes"><a href="#usage-notes">Usage Notes</a></h3>
 
@@ -601,6 +607,32 @@ block content
     Map types are stored as [BSON objects in MongoDB](https://en.wikipedia.org/wiki/BSON#Data_types_and_syntax).
     Keys in a BSON object are ordered, so this means the [insertion order](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map#Description)
     property of maps is maintained.
+
+    Mongoose supports a special `$*` syntax to [populate](/docs/populate.html) all elements in a map.
+    For example, suppose your `socialMediaHandles` map contains a `ref`:
+
+    ```javascript
+    const userSchema = new Schema({
+      socialMediaHandles: {
+        type: Map,
+        of: new Schema({
+          handle: String,
+          oauth: {
+            type: ObjectId,
+            ref: 'OAuth'
+          }
+        })
+      }
+    });
+    const User = mongoose.model('User', userSchema);
+    ```
+
+    To populate every `socialMediaHandles` entry's `oauth` property, you should populate
+    on `socialMediaHandles.$*.oauth`:
+
+    ```javascript
+    const user = await User.findOne().populate('socialMediaHandles.$*.oauth');
+    ```
 
     <h3 id="getters"><a href="#getters">Getters</a></h3>
 

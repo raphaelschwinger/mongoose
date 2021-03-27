@@ -1603,14 +1603,14 @@ describe('Model', function() {
       let docMiddleware = 0;
       let queryMiddleware = 0;
 
-      schema.pre('remove', { query: true }, function() {
-        assert.ok(this instanceof Model.Query);
+      schema.pre('remove', { query: true, document: false }, function() {
         ++queryMiddleware;
+        assert.ok(this instanceof Model.Query);
       });
 
-      schema.pre('remove', { document: true }, function() {
-        assert.ok(this instanceof Model);
+      schema.pre('remove', { query: false, document: true }, function() {
         ++docMiddleware;
+        assert.ok(this instanceof Model);
       });
 
       const Model = db.model('Test', schema);
@@ -4726,6 +4726,54 @@ describe('Model', function() {
       });
     });
 
+    it('insertMany() populate option (gh-9720)', function() {
+      const schema = new Schema({
+        name: { type: String, required: true }
+      });
+      const Movie = db.model('Movie', schema);
+      const Person = db.model('Person', Schema({
+        name: String,
+        favoriteMovie: {
+          type: 'ObjectId',
+          ref: 'Movie'
+        }
+      }));
+
+      return co(function*() {
+        const movies = yield Movie.create([
+          { name: 'The Empire Strikes Back' },
+          { name: 'Jingle All The Way' }
+        ]);
+        const people = yield Person.insertMany([
+          { name: 'Test1', favoriteMovie: movies[1]._id },
+          { name: 'Test2', favoriteMovie: movies[0]._id }
+        ], { populate: 'favoriteMovie' });
+
+        assert.equal(people.length, 2);
+        assert.equal(people[0].favoriteMovie.name, 'Jingle All The Way');
+        assert.equal(people[1].favoriteMovie.name, 'The Empire Strikes Back');
+      });
+    });
+
+    it('insertMany() sets `isNew` for inserted documents with `ordered = false` (gh-9677)', function() {
+      const schema = new Schema({
+        title: { type: String, required: true, unique: true }
+      });
+      const Movie = db.model('Movie', schema);
+
+      const arr = [{ title: 'The Phantom Menace' }, { title: 'The Phantom Menace' }];
+      const opts = { ordered: false };
+      return co(function*() {
+        yield Movie.init();
+        const err = yield Movie.insertMany(arr, opts).then(() => err, err => err);
+        assert.ok(err);
+        assert.ok(err.insertedDocs);
+
+        assert.equal(err.insertedDocs.length, 1);
+        assert.strictEqual(err.insertedDocs[0].isNew, false);
+      });
+    });
+
     it('insertMany() validation error with ordered true and rawResult true when all documents are invalid', function(done) {
       const schema = new Schema({
         name: { type: String, required: true }
@@ -5730,6 +5778,35 @@ describe('Model', function() {
           assert.equal(people[1].age, 11);
           assert.equal(people[2].age, 16);
           assert.equal(people[3].age, 30);
+        });
+      });
+
+      it('insertOne and replaceOne should not throw an error when set `timestamps: false` in schmea (gh-10048)', function() {
+        const schema = new Schema({ name: String }, { timestamps: false });
+        const Model = db.model('Test', schema);
+
+        return co(function*() {
+          yield Model.create({ name: 'test' });
+
+          yield Model.bulkWrite([
+            {
+              insertOne: {
+                document: { name: 'insertOne-test' }
+              }
+            },
+            {
+              replaceOne: {
+                filter: { name: 'test' },
+                replacement: { name: 'replaceOne-test' }
+              }
+            }
+          ]);
+
+          for (const name of ['insertOne-test', 'replaceOne-test']) {
+            const doc = yield Model.findOne({ name });
+            assert.strictEqual(doc.createdAt, undefined);
+            assert.strictEqual(doc.updatedAt, undefined);
+          }
         });
       });
     });
@@ -7032,6 +7109,28 @@ describe('Model', function() {
 
         const user3 = yield User.findOneAndReplace({ _id: createdUser._id }, { name: 'Hafez3' }, { new: false });
         assert.equal(user3.name, 'Hafez2');
+      });
+    });
+  });
+  describe('Setting the explain flag', function() {
+    it('should give an object back rather than a boolean (gh-8275)', function() {
+      return co(function*() {
+        const MyModel = db.model('Character', mongoose.Schema({
+          name: String,
+          age: Number,
+          rank: String
+        }));
+
+        yield MyModel.create([
+          { name: 'Jean-Luc Picard', age: 59, rank: 'Captain' },
+          { name: 'William Riker', age: 29, rank: 'Commander' },
+          { name: 'Deanna Troi', age: 28, rank: 'Lieutenant Commander' },
+          { name: 'Geordi La Forge', age: 29, rank: 'Lieutenant' },
+          { name: 'Worf', age: 24, rank: 'Lieutenant' }
+        ]);
+        const res = yield MyModel.exists({}, { explain: true });
+
+        assert.equal(typeof res, 'object');
       });
     });
   });
